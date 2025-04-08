@@ -9,21 +9,22 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
 
-    env:  # 🔥 여기 중요!
+    env:  # ✅ 여기 필수!
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-    - name: Install dependencies
-      run: |
-        pip install gspread oauth2client requests
+      - name: Install dependencies
+        run: |
+          pip install gspread oauth2client requests
 
-    - name: Run UNIPASS script
-      run: python aaa.py
+      - name: Run UNIPASS script
+        run: python aaa.py
