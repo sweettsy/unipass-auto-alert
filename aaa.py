@@ -7,7 +7,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
 # Slack Webhook
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
 # ✅ Google Sheets 인증 (환경변수 기반)
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
