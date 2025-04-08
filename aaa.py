@@ -1,5 +1,3 @@
-# Re-execute the script since code execution state was reset and file was not saved
-code = """
 import os
 import json
 import requests
@@ -8,10 +6,10 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 
-# Slack Webhook
+# Slack Webhook URL (GitHub Secret에서 불러오기)
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-# ✅ Google Sheets 인증 (환경변수 기반)
+# ✅ Google Sheets 인증
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -42,7 +40,7 @@ def format_date(value):
 
 def generate_slack_message(hbl_no, mbl_no, origin, destination, complete_time, slack_user_id):
     mention_block = f"<@{slack_user_id}>" if slack_user_id else ""
-    message = f\"""
+    message = f"""
 🚨 *하선신고 수리 완료!*
 
 *🕒 완료시각:* `{complete_time}`
@@ -51,9 +49,10 @@ def generate_slack_message(hbl_no, mbl_no, origin, destination, complete_time, s
 *📑 MB/L:* `{mbl_no}`
 
 📣 {mention_block} *인보이스 작업 시작해주세요!*
-    \""".strip()
+    """.strip()
     return {"text": message}
 
+# 특정 B/L이 '수입신고 수리 후 반출'이면 종료대상으로 간주
 def should_skip_tracking(hbl_no, bl_yy):
     for row in existing_logs:
         if row[0] == hbl_no and row[1] == bl_yy and row[5] == "수입신고 수리 후 반출":
@@ -71,10 +70,12 @@ for idx, row in enumerate(rows, start=3):
     if not hbl_no or not bl_yy or disabled_flag == "🛑":
         continue
 
+    # 종료조건 1: 로그에 수입신고 수리 후 반출
     if should_skip_tracking(hbl_no, bl_yy):
         main_ws.update_cell(idx, 16, "🛑")
         continue
 
+    # 종료조건 2: 등록일로부터 7일 경과
     created_date_str = row[14].strip() if len(row) > 14 else ""
     if created_date_str:
         try:
@@ -96,6 +97,7 @@ for idx, row in enumerate(rows, start=3):
         main = root.find("cargCsclPrgsInfoQryVo")
         details = root.findall("cargCsclPrgsInfoDtlQryVo")
 
+        # 기본 정보 초기화
         etprDt = csclPrgsStts = prcsDttm_main = mtYn = ""
         tpcd = rlbrDttm = rlbrCn = shedNm = prcsDttm_detail = ""
         mblNo = ldprNm = dsprNm = ""
@@ -117,6 +119,7 @@ for idx, row in enumerate(rows, start=3):
             shedNm = latest.findtext("shedNm", "")
             prcsDttm_detail = format_date(latest.findtext("prcsDttm", ""))
 
+        # 상태조회 시트 업데이트
         update_row = [
             etprDt, csclPrgsStts, prcsDttm_main, mtYn, tpcd,
             rlbrDttm, rlbrCn, shedNm, prcsDttm_detail, mblNo, ldprNm, dsprNm,
@@ -124,6 +127,7 @@ for idx, row in enumerate(rows, start=3):
         ]
         main_ws.update(f"D{idx}:P{idx}", [update_row])
 
+        # 로그 저장 및 슬랙 알림
         new_logs = []
         if details:
             for d in details:
@@ -158,9 +162,3 @@ for idx, row in enumerate(rows, start=3):
         print(f"❌ 오류 발생 (B/L: {hbl_no}, 연도: {bl_yy}): {e}")
 
 print("🎉 최종 실행 완료: 상태조회 + 상태로그 + 슬랙알림 + 종료조건")
-"""
-
-with open("/mnt/data/aaa_final_with_stop_conditions.py", "w", encoding="utf-8") as f:
-    f.write(code)
-
-"/mnt/data/aaa_final_with_stop_conditions.py"
