@@ -4,12 +4,12 @@ import requests
 import xml.etree.ElementTree as ET
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# Slack Webhook URL (GitHub Secret에서 불러오기)
+# Slack Webhook
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-# ✅ Google Sheets 인증
+# ✅ Google Sheets 인증 (환경변수 기반)
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -28,9 +28,7 @@ existing_logs = log_ws.get_all_values()[1:]
 logged_set = set((row[0], row[1], row[3], row[4]) for row in existing_logs if len(row) >= 5)
 
 # 상태조회 시트 데이터 (3행부터)
-data = main_ws.get_all_values()
-headers = data[1]
-rows = data[2:]
+data = main_ws.get_all_values()[2:]
 
 def format_date(value):
     try:
@@ -52,39 +50,13 @@ def generate_slack_message(hbl_no, mbl_no, origin, destination, complete_time, s
     """.strip()
     return {"text": message}
 
-# 특정 B/L이 '수입신고 수리 후 반출'이면 종료대상으로 간주
-def should_skip_tracking(hbl_no, bl_yy):
-    for row in existing_logs:
-        if row[0] == hbl_no and row[1] == bl_yy and row[5] == "수입신고 수리 후 반출":
-            return True
-    return False
-
-now = datetime.now()
-
-for idx, row in enumerate(rows, start=3):
+for idx, row in enumerate(data, start=3):
     hbl_no = row[0].strip()
     bl_yy = row[1].strip()
     slack_user_id = row[2].strip()
-    disabled_flag = row[15].strip() if len(row) > 15 else ""
 
-    if not hbl_no or not bl_yy or disabled_flag == "🛑":
+    if not hbl_no or not bl_yy:
         continue
-
-    # 종료조건 1: 로그에 수입신고 수리 후 반출
-    if should_skip_tracking(hbl_no, bl_yy):
-        main_ws.update_cell(idx, 16, "🛑")
-        continue
-
-    # 종료조건 2: 등록일로부터 7일 경과
-    created_date_str = row[14].strip() if len(row) > 14 else ""
-    if created_date_str:
-        try:
-            created_date = datetime.strptime(created_date_str, "%Y-%m-%d")
-            if (now - created_date).days >= 7:
-                main_ws.update_cell(idx, 16, "🛑")
-                continue
-        except:
-            pass
 
     try:
         url = (
@@ -97,7 +69,7 @@ for idx, row in enumerate(rows, start=3):
         main = root.find("cargCsclPrgsInfoQryVo")
         details = root.findall("cargCsclPrgsInfoDtlQryVo")
 
-        # 기본 정보 초기화
+        # 상태조회 정보 초기화
         etprDt = csclPrgsStts = prcsDttm_main = mtYn = ""
         tpcd = rlbrDttm = rlbrCn = shedNm = prcsDttm_detail = ""
         mblNo = ldprNm = dsprNm = ""
@@ -122,12 +94,11 @@ for idx, row in enumerate(rows, start=3):
         # 상태조회 시트 업데이트
         update_row = [
             etprDt, csclPrgsStts, prcsDttm_main, mtYn, tpcd,
-            rlbrDttm, rlbrCn, shedNm, prcsDttm_detail, mblNo, ldprNm, dsprNm,
-            created_date_str or now.strftime("%Y-%m-%d"), "", disabled_flag
+            rlbrDttm, rlbrCn, shedNm, prcsDttm_detail, mblNo, ldprNm, dsprNm
         ]
-        main_ws.update(f"D{idx}:P{idx}", [update_row])
+        main_ws.update(f"D{idx}:O{idx}", [update_row])
 
-        # 로그 저장 및 슬랙 알림
+        # 상태로그 + 슬랙 알림
         new_logs = []
         if details:
             for d in details:
@@ -161,4 +132,4 @@ for idx, row in enumerate(rows, start=3):
     except Exception as e:
         print(f"❌ 오류 발생 (B/L: {hbl_no}, 연도: {bl_yy}): {e}")
 
-print("🎉 최종 실행 완료: 상태조회 + 상태로그 + 슬랙알림 + 종료조건")
+print("🎉 최종 실행 완료: 상태조회 + 상태로그 + 슬랙알림")
