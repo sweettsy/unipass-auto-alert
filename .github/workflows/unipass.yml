@@ -2,8 +2,8 @@ name: Run UNIPASS Auto Alert
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: "*/10 * * * *"  # 매 10분마다 실행
+  workflow_dispatch:        # 수동 실행도 가능하게 설정
 
 jobs:
   run-script:
