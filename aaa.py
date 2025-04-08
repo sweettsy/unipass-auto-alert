@@ -23,9 +23,16 @@ log_ws = spreadsheet.worksheet("상태로그")
 # 유니패스 API 키
 API_KEY = "i270g245b044o067e040h090r0"
 
-# 기존 로그 불러오기 (중복 방지용)
+# 기존 로그 불러오기 (중복 방지용 + 조회제외 조건)
 existing_logs = log_ws.get_all_values()[1:]
 logged_set = set((row[0], row[1], row[3], row[4]) for row in existing_logs if len(row) >= 5)
+
+# 🚫 '수입신고 수리 후 반출' 건은 조회 제외 대상
+excluded_hbls = set(
+    (row[0], row[1])
+    for row in existing_logs
+    if len(row) >= 6 and row[5] == "수입신고 수리 후 반출"
+)
 
 # 상태조회 시트 데이터 (3행부터)
 data = main_ws.get_all_values()[2:]
@@ -58,6 +65,10 @@ for idx, row in enumerate(data, start=3):
     if not hbl_no or not bl_yy:
         continue
 
+    # 🚫 제외 대상이면 건너뜀
+    if (hbl_no, bl_yy) in excluded_hbls:
+        continue
+
     try:
         url = (
             f"https://unipass.customs.go.kr:38010/ext/rest/cargCsclPrgsInfoQry/retrieveCargCsclPrgsInfo"
@@ -69,7 +80,6 @@ for idx, row in enumerate(data, start=3):
         main = root.find("cargCsclPrgsInfoQryVo")
         details = root.findall("cargCsclPrgsInfoDtlQryVo")
 
-        # 상태조회 정보 초기화
         etprDt = csclPrgsStts = prcsDttm_main = mtYn = ""
         tpcd = rlbrDttm = rlbrCn = shedNm = prcsDttm_detail = ""
         mblNo = ldprNm = dsprNm = ""
@@ -91,14 +101,12 @@ for idx, row in enumerate(data, start=3):
             shedNm = latest.findtext("shedNm", "")
             prcsDttm_detail = format_date(latest.findtext("prcsDttm", ""))
 
-        # 상태조회 시트 업데이트
         update_row = [
             etprDt, csclPrgsStts, prcsDttm_main, mtYn, tpcd,
             rlbrDttm, rlbrCn, shedNm, prcsDttm_detail, mblNo, ldprNm, dsprNm
         ]
         main_ws.update(f"D{idx}:O{idx}", [update_row])
 
-        # 상태로그 + 슬랙 알림
         new_logs = []
         if details:
             for d in details:
@@ -132,4 +140,4 @@ for idx, row in enumerate(data, start=3):
     except Exception as e:
         print(f"❌ 오류 발생 (B/L: {hbl_no}, 연도: {bl_yy}): {e}")
 
-print("🎉 최종 실행 완료: 상태조회 + 상태로그 + 슬랙알림")
+print("🎉 최종 실행 완료: 상태조회 + 상태로그 + 슬랙알림 + 종료조건")
